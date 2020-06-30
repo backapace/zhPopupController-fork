@@ -93,16 +93,14 @@ typedef NS_ENUM(NSInteger, zhDateType) { // 应该与allDataArray数组顺序一
 #pragma mark - Initial selected
 
 - (void)initialSelectedItem {
-    NSArray<NSString *> *array = [NSDate getCurrentTimeComponents];
+    NSDateComponents *components = [[NSCalendar currentCalendar] components:(NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour | NSCalendarUnitMinute) fromDate:[NSDate date]];
     zhCurrentDateModel *model = self.currentDateModel;
-    model.currentYear = [array[0] stringByAppendingString:@"年"];
-    model.currentMonth = [array[1] stringByAppendingString:@"月"];
-    [self reloadDayComponent];
-    model.currentDay = [array[2] stringByAppendingString:@"日"];
-    model.currentHours = [array[3] stringByAppendingString:@"时"];
-    NSInteger correctIdx = [self correctIdx:array[4].integerValue];
-    model.currentMinutes = self.minutesArray[correctIdx];
-    model.currentDayIdx = [self.dayArray zh_indexOfObject:model.currentDay];
+    model.currentYear = [NSString stringWithFormat:@"%@年", @(components.year)];
+    model.currentMonth = [NSString stringWithFormat:@"%@月", @(components.month)];
+    model.currentDay = [NSString stringWithFormat:@"%@日", @(components.day)];
+    model.currentHours = [NSString stringWithFormat:@"%@时", @(components.hour)];
+    model.currentMinutes = [NSString stringWithFormat:@"%@分", @(components.minute+1)];
+    model.currentDayIdx = components.day;
 
     [_pickerView selectRow:[self.yearArray zh_indexOfObject:model.currentYear] inComponent:0 animated:YES];
     [_pickerView selectRow:[self.monthArray zh_indexOfObject:model.currentMonth] inComponent:1 animated:YES];
@@ -241,11 +239,10 @@ typedef NS_ENUM(NSInteger, zhDateType) { // 应该与allDataArray数组顺序一
     NSInteger timestamp = [NSDate timestampFromTimeString:timeString formatter:@"yyyy-MM-dd HH:mm"];
     _selectedTimestamp = timestamp;
     
-    NSString *showText = [NSString stringWithFormat:@"%@%@%@ %@ %@%@",
+    NSString *showText = [NSString stringWithFormat:@"%@%@%@ %@%@",
                           model.currentYear,
                           model.currentMonth,
                           model.currentDay,
-                          weekString,
                           model.currentHours,
                           model.currentMinutes];
     _titleLabel.text = showText;
@@ -256,10 +253,11 @@ typedef NS_ENUM(NSInteger, zhDateType) { // 应该与allDataArray数组顺序一
 // 年份
 - (NSArray<NSString *> *)yearArray {
     if (!_yearArray) {
-        NSInteger startYear = 1970, endYear = 2099;
+        NSDateComponents *components = [[NSCalendar currentCalendar] components:NSCalendarUnitYear fromDate:[NSDate date]];
+        NSInteger startYear = components.year, endYear = startYear+10;
         NSMutableArray *array = @[].mutableCopy;
-        for (long i = startYear; i <= endYear; i++) {
-            [array addObject:[NSString stringWithFormat:@"%lu年", i]];
+        for (NSInteger i = startYear; i <= endYear; i++) {
+            [array addObject:[NSString stringWithFormat:@"%@年", @(i)]];
         }
         _yearArray = array.copy;
     }
@@ -269,9 +267,10 @@ typedef NS_ENUM(NSInteger, zhDateType) { // 应该与allDataArray数组顺序一
 // 月份
 - (NSArray<NSString *> *)monthArray {
     if (!_monthArray) {
+        NSDateComponents *components = [[NSCalendar currentCalendar] components:NSCalendarUnitMonth fromDate:[NSDate date]];
         NSMutableArray *array = @[].mutableCopy;
-        for (int i = 1; i <= 12; i++) {
-            [array addObject:[NSString stringWithFormat:@"%.2d月", i]];
+        for (NSInteger i = 1; i <= 12; i++) {
+            [array addObject:[NSString stringWithFormat:@"%@月", @(i)]];
         }
         _monthArray = array.copy;
     }
@@ -281,9 +280,10 @@ typedef NS_ENUM(NSInteger, zhDateType) { // 应该与allDataArray数组顺序一
 // 当月的天数
 - (NSArray<NSString *> *)dayArray {
     if (!_dayArray) {
+        NSDateComponents *components = [[NSCalendar currentCalendar] components:NSCalendarUnitDay fromDate:[NSDate date]];
         NSMutableArray *array = @[].mutableCopy;
-        for (int i = 1; i <= 31; i ++) { // 最多31天，具体天数需要根据年月计算
-            [array addObject:[NSString stringWithFormat:@"%d日", i]];
+        for (NSInteger i = 1; i <= 31; i ++) { // 最多31天，具体天数需要根据年月计算
+            [array addObject:[NSString stringWithFormat:@"%@日", @(i)]];
         }
         _dayArray = array.copy;
     }
@@ -294,8 +294,8 @@ typedef NS_ENUM(NSInteger, zhDateType) { // 应该与allDataArray数组顺序一
 - (NSArray<NSString *> *)hoursArray {
     if (!_hoursArray) {
         NSMutableArray *array = @[].mutableCopy;
-        for (int i = 0; i < 24; i++) {
-            [array addObject:[NSString stringWithFormat:@"%.2d时", i]];
+        for (NSInteger i = 0; i < 24; i++) {
+            [array addObject:[NSString stringWithFormat:@"%@时", @(i)]];
         }
         _hoursArray = array;
     }
@@ -306,11 +306,8 @@ typedef NS_ENUM(NSInteger, zhDateType) { // 应该与allDataArray数组顺序一
 - (NSArray<NSString *> *)minutesArray {
     if (!_minutesArray) {
         NSMutableArray *array = @[].mutableCopy;
-        for (int i = 0; i < 60; i++) {
-            if (i % 10 == 0) {
-                [array addObject:[NSString stringWithFormat:@"%.2d分", i]];
-                continue;
-            }
+        for (NSInteger i = 0; i < 60; i++) {
+            [array addObject:[NSString stringWithFormat:@"%@分", @(i)]];
         }
         _minutesArray = array;
     }
@@ -350,19 +347,79 @@ typedef NS_ENUM(NSInteger, zhDateType) { // 应该与allDataArray数组顺序一
 - (void)reloadNumberDaysBy:(NSInteger)aMonth inYear:(NSInteger)aYear {
     if (!aMonth || !aYear) return;
     
-    NSMutableArray *array = [NSMutableArray array];
-    for (NSInteger i = 1; i <= [NSDate getSumOfDaysMonth:aMonth inYear:aYear]; i++) {
-        [array addObject:[NSString stringWithFormat:@"%lu日", i]];
-    }
+    NSDateFormatter * formatter = [[NSDateFormatter alloc] init];
+    [formatter setDateFormat:@"yyyy-MM"];
+    NSString *dateString = [NSString stringWithFormat:@"%lu-%lu", aYear, aMonth];
+    NSDate *date = [formatter dateFromString:dateString];
+    NSRange daysInMonth = [[NSCalendar currentCalendar] rangeOfUnit:NSCalendarUnitDay inUnit:NSCalendarUnitMonth forDate:date];
+    NSDateComponents *components = [[NSCalendar currentCalendar] components:(NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour | NSCalendarUnitMinute) fromDate:[NSDate date]];
     
+    NSInteger i = (components.year==aYear)?components.month:1;
+    /*
+    if (aMonth<i) {
+        self.currentDateModel.currentMonth = [NSString stringWithFormat:@"%@月", @(i)];
+    }
+    NSMutableArray *months = [NSMutableArray array];
+    for (; i <= 12; i++) {
+        [months addObject:[NSString stringWithFormat:@"%@月", @(i)]];
+    }
+    NSInteger idx = [self.allDataArray indexOfObject:self.monthArray];
+    self.monthArray = months;
+    [self.allDataArray replaceObjectAtIndex:idx withObject:self.monthArray];
+    [self.pickerView reloadComponent:idx];
+    [_pickerView selectRow:[self.monthArray zh_indexOfObject:_currentDateModel.currentMonth] inComponent:1 animated:YES];
+    aMonth = [self.currentDateModel.currentMonth deleteLastCharacter].integerValue;
+     //*/
+    
+    i = (components.year==aYear&&components.month==aMonth)?components.day:1;
+    NSInteger dayInt = [self.currentDateModel.currentDay deleteLastCharacter].integerValue;
+    if (dayInt<i) {
+        self.currentDateModel.currentDay = [NSString stringWithFormat:@"%@日", @(i)];
+    } else if (dayInt>daysInMonth.length) {
+        self.currentDateModel.currentDay = [NSString stringWithFormat:@"%@日", @(daysInMonth.length)];
+    }
+    NSMutableArray *days = [NSMutableArray array];
+    for (; i <= daysInMonth.length; i++) {
+        [days addObject:[NSString stringWithFormat:@"%@日", @(i)]];
+    }
     NSInteger idx = [self.allDataArray indexOfObject:self.dayArray];
-    self.dayArray = array.copy;
+    self.dayArray = days;
     [self.allDataArray replaceObjectAtIndex:idx withObject:self.dayArray];
     [self.pickerView reloadComponent:idx];
-    // 判断dayArray下标是否超出数组个数
-    NSInteger dataCount = self.allDataArray[idx].count;
-    if (self.currentDateModel.currentDayIdx >= dataCount) {
-        self.currentDateModel.currentDay = self.allDataArray[idx].lastObject;
+    [_pickerView selectRow:[self.dayArray zh_indexOfObject:_currentDateModel.currentDay] inComponent:2 animated:YES];
+}
+
+- (void)reloadHourComponent {
+    NSInteger dayInt = [self.currentDateModel.currentDay deleteLastCharacter].integerValue;
+    NSInteger hourInt = [self.currentDateModel.currentHours deleteLastCharacter].integerValue;
+    NSDateComponents *components = [[NSCalendar currentCalendar] components:(NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour | NSCalendarUnitMinute) fromDate:[NSDate date]];
+    NSInteger i = (components.day==dayInt)?components.hour:0;
+    NSMutableArray *array = [NSMutableArray array];
+    for (; i < 24; i++) {
+        [array addObject:[NSString stringWithFormat:@"%@分", @(i)]];
+    }
+    NSInteger idx = [self.allDataArray indexOfObject:self.hoursArray];
+    self.hoursArray = array.copy;
+    [self.allDataArray replaceObjectAtIndex:idx withObject:self.hoursArray];
+    if (hourInt < components.hour) {
+        self.currentDateModel.currentHours = array.firstObject;
+    }
+}
+
+- (void)reloadMinuteComponent {
+    NSInteger hourInt = [self.currentDateModel.currentHours deleteLastCharacter].integerValue;
+    NSInteger minuteInt = [self.currentDateModel.currentMinutes deleteLastCharacter].integerValue;
+    NSDateComponents *components = [[NSCalendar currentCalendar] components:(NSCalendarUnitYear | NSCalendarUnitMonth | NSCalendarUnitDay | NSCalendarUnitHour | NSCalendarUnitMinute) fromDate:[NSDate date]];
+    NSInteger i = (components.hour==hourInt)?components.minute:0;
+    NSMutableArray *array = [NSMutableArray array];
+    for (; i < 60; i++) {
+        [array addObject:[NSString stringWithFormat:@"%@分", @(i)]];
+    }
+    NSInteger idx = [self.allDataArray indexOfObject:self.minutesArray];
+    self.minutesArray = array.copy;
+    [self.allDataArray replaceObjectAtIndex:idx withObject:self.minutesArray];
+    if (minuteInt < components.minute) {
+        self.currentDateModel.currentHours = [NSString stringWithFormat:@"%@分", @(components.minute)];
     }
 }
 
